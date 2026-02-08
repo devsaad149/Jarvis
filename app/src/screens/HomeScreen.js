@@ -8,8 +8,10 @@ import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Buffer } from 'buffer';
 
-// Backend URL - use localhost for web, 10.0.2.2 for Android emulator
-const BACKEND_URL = Platform.OS === 'web' ? 'http://localhost:8000' : 'http://10.0.2.2:8000';
+// Backend URL - use relative path for production (Vercel), localhost for local dev
+const BACKEND_URL = Platform.OS === 'web'
+    ? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000')
+    : 'http://10.0.2.2:8000';
 
 const HomeScreen = ({ route }) => {
     const { assistantName = 'JARVIS' } = route.params || {};
