@@ -103,8 +103,14 @@ const HomeScreen = ({ route }) => {
                 console.log('Cleaning up existing recording...');
                 setIsCleaningUp(true);
                 try {
-                    await recording.stopAndUnloadAsync();
-                    console.log('Previous recording cleaned up successfully');
+                    // Check if recording can be stopped (not already unloaded)
+                    const status = await recording.getStatusAsync();
+                    if (status.canRecord || status.isRecording) {
+                        await recording.stopAndUnloadAsync();
+                        console.log('Previous recording cleaned up successfully');
+                    } else {
+                        console.log('Recording already stopped, just clearing state');
+                    }
                 } catch (e) {
                     console.log('Cleanup of previous recording:', e);
                 }
