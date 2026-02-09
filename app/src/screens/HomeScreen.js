@@ -1,4 +1,4 @@
-// Voice Recording Fix v3.0 - Robust useRef Logic
+// Voice Recording Fix v2.0 - Simplified Logic
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Linking } from 'react-native';
 import axios from 'axios';
@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Buffer } from 'buffer';
 
 // Backend URL - use relative path for production (Vercel), localhost for local dev
+// Force rebuild: 2026-02-09 18:18
 const BACKEND_URL = Platform.OS === 'web'
     ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8000' : '')
     : 'http://10.0.2.2:8000';
@@ -92,6 +93,7 @@ const HomeScreen = ({ route }) => {
     const SILENCE_DURATION_MS = 1000; // Reduced to 1.0s for faster response
 
     const startRecording = async () => {
+        console.log('--- STARTING RECORDING v3.0 (REF LOGIC) ---');
         try {
             // Robust cleanup: Check both Ref and State
             // The Ref is the "source of truth" for the native resource
