@@ -14,27 +14,22 @@ async def transcribe_audio(
     Transcribe audio using Groq Whisper.
     """
     try:
-        # Save temp file
-        temp_filename = f"temp_{audio.filename}"
-        with open(temp_filename, "wb") as buffer:
-            buffer.write(await audio.read())
-
         from app.services.ai_service import ai_service
         
         if not ai_service.client:
              raise HTTPException(status_code=500, detail="Groq client not initialized")
 
-        with open(temp_filename, "rb") as file:
-            transcription = ai_service.client.audio.transcriptions.create(
-                file=(temp_filename, file.read()),
-                model="whisper-large-v3-turbo",
-                response_format="json",
-                language="en",
-                temperature=0.0
-            )
-
-        # Cleanup
-        os.remove(temp_filename)
+        # Read file content into memory
+        file_content = await audio.read()
+        
+        # Send directly to Groq without saving to disk
+        transcription = ai_service.client.audio.transcriptions.create(
+            file=(audio.filename, file_content),
+            model="whisper-large-v3-turbo",
+            response_format="json",
+            language="en",
+            temperature=0.0
+        )
 
         print(f"Transcribed: {transcription.text}")
         return {
@@ -43,10 +38,9 @@ async def transcribe_audio(
             "language": language
         }
     except Exception as e:
-        if os.path.exists(temp_filename):
-            os.remove(temp_filename)
         error_msg = f"Transcription Error: {str(e)}"
         print(error_msg)
-        with open("last_error.txt", "w") as f:
-            f.write(error_msg)
+        # Verify if it's an API Key issue
+        if "401" in str(e):
+             raise HTTPException(status_code=500, detail="Groq API Key Invalid or Missing on Vercel")
         raise HTTPException(status_code=500, detail=str(e))
