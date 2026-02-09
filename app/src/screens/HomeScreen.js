@@ -77,6 +77,7 @@ const HomeScreen = ({ route }) => {
     // --- Voice Recording & VAD Logic ---
     const [recording, setRecording] = useState();
     const [isRecording, setIsRecording] = useState(false);
+    const [isCleaningUp, setIsCleaningUp] = useState(false); // Prevent overlapping recordings
     const silenceTimer = useRef(null);
 
     // Web VAD Refs
@@ -90,17 +91,33 @@ const HomeScreen = ({ route }) => {
 
     const startRecording = async () => {
         try {
+            // Prevent starting if already cleaning up
+            if (isCleaningUp) {
+                console.log('Still cleaning up previous recording, please wait...');
+                return;
+            }
+
             // CRITICAL FIX: Clean up any existing recording first to prevent
             // "Only one Recording object can be prepared at a given time" error
             if (recording) {
+                console.log('Cleaning up existing recording...');
+                setIsCleaningUp(true);
                 try {
                     await recording.stopAndUnloadAsync();
+                    console.log('Previous recording cleaned up successfully');
                 } catch (e) {
                     console.log('Cleanup of previous recording:', e);
                 }
+
+                // CRITICAL: Clear the state BEFORE creating new recording
                 setRecording(undefined);
+
+                // Wait to ensure cleanup is complete and state is updated
+                await new Promise(resolve => setTimeout(resolve, 200));
+                setIsCleaningUp(false);
             }
 
+            console.log('Requesting permissions...');
             await Audio.requestPermissionsAsync();
             await Audio.setAudioModeAsync({
                 allowsRecordingIOS: true,
@@ -184,6 +201,9 @@ const HomeScreen = ({ route }) => {
     };
 
     const stopRecording = async () => {
+        // CRITICAL: Store recording reference FIRST before any cleanup
+        const currentRecording = recording;
+
         // Clear silence timer
         if (silenceTimer.current) {
             clearTimeout(silenceTimer.current);
@@ -198,15 +218,16 @@ const HomeScreen = ({ route }) => {
         audioContextRef.current = null;
         streamRef.current = null;
 
-        if (!recording) {
+        if (!currentRecording) {
+            console.log('No recording to stop');
             setIsRecording(false);
             return;
         }
 
         setIsRecording(false);
         try {
-            await recording.stopAndUnloadAsync();
-            const uri = recording.getURI();
+            await currentRecording.stopAndUnloadAsync();
+            const uri = currentRecording.getURI();
 
             // Upload and Transcribe
             setIsLoading(true);
@@ -511,10 +532,10 @@ const HomeScreen = ({ route }) => {
                     style={[
                         styles.micButton,
                         isRecording && styles.micButtonActive,
-                        isLoading && styles.micButtonDisabled
+                        (isLoading || isCleaningUp) && styles.micButtonDisabled
                     ]}
                     onPress={isRecording ? stopRecording : startRecording}
-                    disabled={isLoading}
+                    disabled={isLoading || isCleaningUp}
                 >
                     {/* Simple Icon or Text for now */}
                     <Text style={styles.micButtonText}>{isRecording ? '🔴' : '🎤'}</Text>
