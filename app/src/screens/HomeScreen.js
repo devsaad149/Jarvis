@@ -124,7 +124,7 @@ const HomeScreen = ({ route }) => {
                 playsInSilentModeIOS: true,
             });
 
-            const { recording } = await Audio.Recording.createAsync(
+            const { recording: newRecording } = await Audio.Recording.createAsync(
                 Audio.RecordingOptionsPresets.HIGH_QUALITY,
                 (status) => {
                     // Mobile VAD
@@ -135,7 +135,7 @@ const HomeScreen = ({ route }) => {
                 100
             );
 
-            setRecording(recording);
+            setRecording(newRecording);
             setIsRecording(true);
 
             // Web-based VAD for silence detection
