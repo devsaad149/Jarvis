@@ -90,6 +90,17 @@ const HomeScreen = ({ route }) => {
 
     const startRecording = async () => {
         try {
+            // CRITICAL FIX: Clean up any existing recording first to prevent
+            // "Only one Recording object can be prepared at a given time" error
+            if (recording) {
+                try {
+                    await recording.stopAndUnloadAsync();
+                } catch (e) {
+                    console.log('Cleanup of previous recording:', e);
+                }
+                setRecording(undefined);
+            }
+
             await Audio.requestPermissionsAsync();
             await Audio.setAudioModeAsync({
                 allowsRecordingIOS: true,
@@ -114,65 +125,50 @@ const HomeScreen = ({ route }) => {
             if (Platform.OS === 'web') {
                 startWebVAD();
             }
+            // Web-based VAD for silence detection
+            if (Platform.OS === 'web') {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                streamRef.current = stream;
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                audioContextRef.current = audioContext;
+                const analyser = audioContext.createAnalyser();
+                analyserRef.current = analyser; // Store analyser for later use
+                const microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+                analyser.fftSize = 512;
+                const bufferLength = analyser.frequencyBinCount;
+                const dataArray = new Uint8Array(bufferLength);
 
-        } catch (err) {
-            console.error('Failed to start recording', err);
-        }
-    };
+                const checkWebVolume = () => {
+                    if (!isRecording && !audioContextRef.current) return; // Stop if recording ended
 
-    const startWebVAD = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            streamRef.current = stream;
+                    analyser.getByteFrequencyData(dataArray);
+                    const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+                    setVolume(Math.round(average)); // Update debug volume
 
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            audioContextRef.current = audioContext;
-
-            const analyser = audioContext.createAnalyser();
-            analyser.fftSize = 256;
-            analyserRef.current = analyser;
-
-            const source = audioContext.createMediaStreamSource(stream);
-            source.connect(analyser);
-
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-            const checkVolume = () => {
-                if (!isRecording && !audioContextRef.current) return;
-
-                analyser.getByteFrequencyData(dataArray);
-
-                // Calculate average volume
-                let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i];
-                }
-                const average = sum / dataArray.length;
-                setVolume(Math.round(average)); // Update debug volume
-
-                // Approx mapping: 0-255. Silence usually < 10. Speech > 30.
-                // Converting to roughly match -160 to 0 dB scale is hard, 
-                // but let's say average < 10 is silence.
-
-                if (average < 10) { // Silence Threshold for Web
-                    if (!silenceTimer.current) {
-                        silenceTimer.current = setTimeout(() => {
-                            stopRecording();
-                        }, SILENCE_DURATION_MS);
+                    if (average < 10) { // Silence Threshold for Web
+                        if (!silenceTimer.current) {
+                            silenceTimer.current = setTimeout(() => {
+                                stopRecording();
+                            }, SILENCE_DURATION_MS); // Use global constant
+                        }
+                    } else {
+                        if (silenceTimer.current) {
+                            clearTimeout(silenceTimer.current);
+                            silenceTimer.current = null;
+                        }
                     }
-                } else {
-                    if (silenceTimer.current) {
-                        clearTimeout(silenceTimer.current);
-                        silenceTimer.current = null;
-                    }
-                }
-
-                resultRef.current = requestAnimationFrame(checkVolume);
-            };
-
-            checkVolume();
-        } catch (e) {
-            console.error("Web VAD Error:", e);
+                    resultRef.current = requestAnimationFrame(checkWebVolume);
+                };
+                checkWebVolume();
+            }
+        } catch (error) {
+            console.error('Failed to start recording', error);
+            if (Platform.OS === 'web') {
+                alert(`Failed to start recording: ${error.message}`);
+            }
+            setIsRecording(false);
+            setRecording(undefined);
         }
     };
 
