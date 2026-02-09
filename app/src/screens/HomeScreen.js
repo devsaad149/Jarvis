@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Buffer } from 'buffer';
 
 // Backend URL - use relative path for production (Vercel), localhost for local dev
+// Force rebuild: 2026-02-09 18:18
 const BACKEND_URL = Platform.OS === 'web'
     ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8000' : '')
     : 'http://10.0.2.2:8000';
