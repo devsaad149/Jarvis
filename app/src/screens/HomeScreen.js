@@ -23,13 +23,47 @@ const HomeScreen = ({ route }) => {
     const [inputText, setInputText] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const scrollViewRef = useRef();
+    const loadingTimeoutRef = useRef(null); // Ref for safety timeout
 
     const [volume, setVolume] = useState(0); // Debug volume
 
     useEffect(() => {
         // Request audio permissions
         Audio.requestPermissionsAsync();
+
+        return () => {
+            if (loadingTimeoutRef.current) clearTimeout(loadingTimeoutRef.current);
+        };
     }, []);
+
+    // Safety Timeout Monitor
+    useEffect(() => {
+        if (isLoading) {
+            // Set a failsafe timeout to clear loading state if backend hangs
+            loadingTimeoutRef.current = setTimeout(() => {
+                if (isLoading) {
+                    console.log("Safety Timeout Triggered: Forcing loading state off.");
+                    setIsLoading(false);
+                    // Add a system message so user knows what happened
+                    setMessages(prev => [...prev, {
+                        id: Date.now().toString(),
+                        role: 'assistant',
+                        content: "I'm sorry, I timed out waiting for a response. Please try again."
+                    }]);
+
+                    // Restart listening if in Wake Mode
+                    if (isWakeWordMode) {
+                        setTimeout(startRecording, 1000);
+                    }
+                }
+            }, 15000); // 15 seconds max wait
+        } else {
+            if (loadingTimeoutRef.current) {
+                clearTimeout(loadingTimeoutRef.current);
+                loadingTimeoutRef.current = null;
+            }
+        }
+    }, [isLoading, isWakeWordMode]);
 
     const playAudioResponse = (text) => {
         try {
@@ -50,6 +84,8 @@ const HomeScreen = ({ route }) => {
             });
         } catch (error) {
             console.error('TTS Error:', error);
+            // If TTS fails, ensures we still restart listening
+            if (isWakeWordMode) startRecording();
         }
     };
 
@@ -101,7 +137,11 @@ const HomeScreen = ({ route }) => {
     const SILENCE_DURATION_MS = 1000; // Reduced to 1.0s for faster response
 
     const startRecording = async () => {
-        console.log('--- STARTING RECORDING v3.0 (REF LOGIC) ---');
+        if (isLoading) {
+            console.log("Skipping startRecording because isLoading is true");
+            return;
+        }
+        console.log('--- STARTING RECORDING v4.1 (Stability Fixes) ---');
         try {
             // Robust cleanup: Check both Ref and State
             // The Ref is the "source of truth" for the native resource
@@ -116,8 +156,13 @@ const HomeScreen = ({ route }) => {
                 setRecording(undefined);
             }
 
-            console.log('Requesting permissions...');
-            await Audio.requestPermissionsAsync();
+            // Check permissions again just in case
+            const perm = await Audio.requestPermissionsAsync();
+            if (perm.status !== 'granted') {
+                console.log("Audio permission not granted");
+                return;
+            }
+
             await Audio.setAudioModeAsync({
                 allowsRecordingIOS: true,
                 playsInSilentModeIOS: true,
@@ -185,6 +230,11 @@ const HomeScreen = ({ route }) => {
             setIsRecording(false);
             setRecording(undefined);
             recordingRef.current = null;
+
+            // Retry logic for Wake Mode
+            if (isWakeWordMode && !isLoading) {
+                setTimeout(startRecording, 2000);
+            }
         }
     };
 
@@ -270,9 +320,13 @@ const HomeScreen = ({ route }) => {
             if (!response.ok) {
                 console.error('Transcription API error:', data);
                 if (Platform.OS === 'web') {
-                    alert(`Transcription failed: ${data.detail || 'Unknown error'}. Please check if GROQ_API_KEY is set in Vercel.`);
+                    // alert(`Transcription failed: ${data.detail || 'Unknown error'}. Please check if GROQ_API_KEY is set in Vercel.`);
                 }
                 setIsLoading(false);
+                // Restart if in Wake Mode (even on error)
+                if (isWakeWordMode) {
+                    setTimeout(startRecording, 1000);
+                }
                 return;
             }
 
@@ -286,6 +340,7 @@ const HomeScreen = ({ route }) => {
                         await handleSend(text);
                     } else {
                         console.log(`Wake Word '${wakeWord}' not detected in: "${text}" - Restarting...`);
+                        setIsLoading(false); // Clear loading since we are done with this turn
                         // Restart recording immediately for continuous listening
                         if (isWakeWordMode) {
                             setTimeout(startRecording, 500);
@@ -316,13 +371,20 @@ const HomeScreen = ({ route }) => {
             }
             setIsLoading(false);
             setRecording(undefined);
+
+            // Restart on error too
+            if (isWakeWordMode) {
+                setTimeout(startRecording, 1000);
+            }
         }
     };
     // -----------------------------------
 
     const handleSend = async (manualText = null) => {
         const textToSend = (typeof manualText === 'string' ? manualText : inputText);
-        if (!textToSend.trim() || isLoading) return;
+        if (!textToSend.trim()) return;
+        // NOTE: We do NOT return if isLoading is true here, because stopRecording calls this immediately after setting isLoading=true
+        // But we should guard against double-taps
 
         const userMessage = { id: Date.now().toString(), role: 'user', content: textToSend };
         setMessages(prev => [...prev, userMessage]);
@@ -340,7 +402,7 @@ const HomeScreen = ({ route }) => {
                 message: textToSend,
                 context: { assistantName },
                 history: history
-            }, { timeout: 30000 });
+            }, { timeout: 25000 }); // Slightly reduced timeout
 
             let aiText = response.data.response;
 
@@ -501,6 +563,10 @@ const HomeScreen = ({ route }) => {
             // ... (keep existing error handling)
             const errorMessage = "Sorry, I'm having trouble connecting.";
             setMessages(prev => [...prev, { id: Date.now().toString(), role: 'assistant', content: errorMessage }]);
+            // If error, we still want to resume listening after a bit
+            if (isWakeWordMode) {
+                setTimeout(startRecording, 3000);
+            }
         } finally {
             setIsLoading(false);
         }
