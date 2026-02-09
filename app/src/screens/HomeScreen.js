@@ -233,6 +233,14 @@ const HomeScreen = ({ route }) => {
 
         setIsRecording(false);
         try {
+            // Check if recording can be stopped (not already unloaded)
+            const status = await currentRecording.getStatusAsync();
+            if (!status.canRecord && !status.isRecording) {
+                console.log('Recording already unloaded, skipping stop');
+                setRecording(undefined);
+                return;
+            }
+
             await currentRecording.stopAndUnloadAsync();
             const uri = currentRecording.getURI();
 
