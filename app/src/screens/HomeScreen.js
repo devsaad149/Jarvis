@@ -1,3 +1,4 @@
+// Voice Recording Fix v2.0 - Simplified Logic
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Linking } from 'react-native';
 import axios from 'axios';
@@ -92,36 +93,12 @@ const HomeScreen = ({ route }) => {
 
     const startRecording = async () => {
         try {
-            // Prevent starting if already cleaning up
-            if (isCleaningUp) {
-                console.log('Still cleaning up previous recording, please wait...');
-                return;
-            }
-
-            // CRITICAL FIX: Clean up any existing recording first to prevent
-            // "Only one Recording object can be prepared at a given time" error
+            // SIMPLIFIED: Just clear the state, don't try to stop/unload
+            // The previous recording will be handled by stopRecording
             if (recording) {
-                console.log('Cleaning up existing recording...');
-                setIsCleaningUp(true);
-                try {
-                    // Check if recording can be stopped (not already unloaded)
-                    const status = await recording.getStatusAsync();
-                    if (status.canRecord || status.isRecording) {
-                        await recording.stopAndUnloadAsync();
-                        console.log('Previous recording cleaned up successfully');
-                    } else {
-                        console.log('Recording already stopped, just clearing state');
-                    }
-                } catch (e) {
-                    console.log('Cleanup of previous recording:', e);
-                }
-
-                // CRITICAL: Clear the state BEFORE creating new recording
+                console.log('Clearing previous recording reference...');
                 setRecording(undefined);
-
-                // Wait to ensure cleanup is complete and state is updated
-                await new Promise(resolve => setTimeout(resolve, 200));
-                setIsCleaningUp(false);
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
 
             console.log('Requesting permissions...');
@@ -233,14 +210,6 @@ const HomeScreen = ({ route }) => {
 
         setIsRecording(false);
         try {
-            // Check if recording can be stopped (not already unloaded)
-            const status = await currentRecording.getStatusAsync();
-            if (!status.canRecord && !status.isRecording) {
-                console.log('Recording already unloaded, skipping stop');
-                setRecording(undefined);
-                return;
-            }
-
             await currentRecording.stopAndUnloadAsync();
             const uri = currentRecording.getURI();
 
