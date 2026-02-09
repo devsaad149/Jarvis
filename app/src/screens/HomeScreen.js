@@ -40,6 +40,13 @@ const HomeScreen = ({ route }) => {
                 language: 'en',
                 pitch: 1.0,
                 rate: 0.9,
+                onDone: () => {
+                    // Resume listening after speaking (if in Wake Mode)
+                    if (isWakeWordMode) {
+                        console.log("AI finished speaking. Resuming listening...");
+                        startRecording();
+                    }
+                }
             });
         } catch (error) {
             console.error('TTS Error:', error);
@@ -80,6 +87,7 @@ const HomeScreen = ({ route }) => {
     const [recording, setRecording] = useState();
     const [isRecording, setIsRecording] = useState(false);
     const [isCleaningUp, setIsCleaningUp] = useState(false); // Prevent overlapping recordings
+    const [isWakeWordMode, setIsWakeWordMode] = useState(false); // New: Hands-Free Mode
     const recordingRef = useRef(null); // Ref for persistent recording object
     const silenceTimer = useRef(null);
 
@@ -269,13 +277,32 @@ const HomeScreen = ({ route }) => {
             }
 
             if (data.success && data.transcription && data.transcription.trim().length > 0) {
-                // Determine if we should await this or let it run
-                // Awaiting ensures loading state persists correctly if handleSend manages it
-                await handleSend(data.transcription);
+                const text = data.transcription.trim();
+
+                // WAKE WORD LOGIC
+                if (isWakeWordMode) {
+                    const wakeWord = assistantName.toLowerCase();
+                    if (text.toLowerCase().includes(wakeWord)) {
+                        await handleSend(text);
+                    } else {
+                        console.log(`Wake Word '${wakeWord}' not detected in: "${text}" - Restarting...`);
+                        // Restart recording immediately for continuous listening
+                        if (isWakeWordMode) {
+                            setTimeout(startRecording, 500);
+                        }
+                    }
+                } else {
+                    // Normal mode: Just send it
+                    await handleSend(text);
+                }
             } else {
                 console.log("Transcription empty or failed", data);
-                if (Platform.OS === 'web') alert("Couldn't hear anything. Please try again.");
+                // if (Platform.OS === 'web') alert("Couldn't hear anything. Please try again.");
                 setIsLoading(false);
+                // Restart if in Wake Mode
+                if (isWakeWordMode) {
+                    setTimeout(startRecording, 500);
+                }
             }
 
         } catch (error) {
@@ -486,6 +513,22 @@ const HomeScreen = ({ route }) => {
         >
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>{assistantName}</Text>
+                <TouchableOpacity
+                    style={[styles.modeButton, isWakeWordMode && styles.modeButtonActive]}
+                    onPress={() => {
+                        const newMode = !isWakeWordMode;
+                        setIsWakeWordMode(newMode);
+                        if (!newMode) {
+                            stopRecording(); // Stop if turning off
+                        } else {
+                            startRecording(); // Start immediately if turning on
+                        }
+                    }}
+                >
+                    <Text style={styles.modeButtonText}>
+                        {isWakeWordMode ? '👂 Always On' : '🛑 Push to Talk'}
+                    </Text>
+                </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -568,11 +611,29 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         borderBottomWidth: 1,
         borderBottomColor: '#2d2d44',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     headerTitle: {
         fontSize: 20,
         fontWeight: 'bold',
         color: '#fff',
+    },
+    modeButton: {
+        backgroundColor: '#2d2d44',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        marginLeft: 10,
+    },
+    modeButtonActive: {
+        backgroundColor: '#6c5ce7',
+    },
+    modeButtonText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '600',
     },
     messagesContainer: {
         flex: 1,
@@ -646,6 +707,7 @@ const styles = StyleSheet.create({
     },
     micButtonDisabled: {
         opacity: 0.5,
+        size: 24,
     },
     micButtonText: {
         fontSize: 20,
