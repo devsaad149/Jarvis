@@ -121,10 +121,6 @@ const HomeScreen = ({ route }) => {
             setRecording(recording);
             setIsRecording(true);
 
-            // Web VAD Logic
-            if (Platform.OS === 'web') {
-                startWebVAD();
-            }
             // Web-based VAD for silence detection
             if (Platform.OS === 'web') {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
