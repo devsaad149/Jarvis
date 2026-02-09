@@ -28,6 +28,7 @@ const HomeScreen = ({ route }) => {
     const [volume, setVolume] = useState(0); // Debug volume
 
     useEffect(() => {
+        console.log("HomeScreen Mounted");
         // Request audio permissions
         Audio.requestPermissionsAsync();
 
@@ -65,7 +66,8 @@ const HomeScreen = ({ route }) => {
         }
     }, [isLoading, isWakeWordMode]);
 
-    const playAudioResponse = (text) => {
+    // Used hoisted function declarations to avoid TDZ issues in minified code
+    function playAudioResponse(text) {
         try {
             // Stop any current speech
             Speech.stop();
@@ -89,7 +91,7 @@ const HomeScreen = ({ route }) => {
         }
     };
 
-    const checkCalendar = async () => {
+    async function checkCalendar() {
         try {
             const { status } = await Calendar.requestCalendarPermissionsAsync();
             if (status !== 'granted') return "Permission denied";
@@ -136,12 +138,12 @@ const HomeScreen = ({ route }) => {
     const SILENCE_THRESHOLD_DB = -30;
     const SILENCE_DURATION_MS = 1000; // Reduced to 1.0s for faster response
 
-    const startRecording = async () => {
+    async function startRecording() {
         if (isLoading) {
             console.log("Skipping startRecording because isLoading is true");
             return;
         }
-        console.log('--- STARTING RECORDING v4.1 (Stability Fixes) ---');
+        console.log('--- STARTING RECORDING v4.2 (Hoisted Functions) ---');
         try {
             // Robust cleanup: Check both Ref and State
             // The Ref is the "source of truth" for the native resource
@@ -238,7 +240,7 @@ const HomeScreen = ({ route }) => {
         }
     };
 
-    const checkSilence = (metering) => {
+    function checkSilence(metering) {
         if (metering < SILENCE_THRESHOLD_DB) {
             if (!silenceTimer.current) {
                 silenceTimer.current = setTimeout(() => {
@@ -253,7 +255,7 @@ const HomeScreen = ({ route }) => {
         }
     };
 
-    const stopRecording = async () => {
+    async function stopRecording() {
         // CRITICAL: Use the Ref to get the recording object
         const currentRecording = recordingRef.current;
 
@@ -352,7 +354,6 @@ const HomeScreen = ({ route }) => {
                 }
             } else {
                 console.log("Transcription empty or failed", data);
-                // if (Platform.OS === 'web') alert("Couldn't hear anything. Please try again.");
                 setIsLoading(false);
                 // Restart if in Wake Mode
                 if (isWakeWordMode) {
@@ -365,7 +366,6 @@ const HomeScreen = ({ route }) => {
             if (Platform.OS === 'web') {
                 // Don't alert "Aborted" if it's just a timeout/cleanup, but do alert real errors
                 if (error.name !== 'AbortError') {
-                    // alert(`Voice command error: ${error.message}. Check console for details.`);
                     console.log("Stop recording suppressed error:", error);
                 }
             }
@@ -380,7 +380,7 @@ const HomeScreen = ({ route }) => {
     };
     // -----------------------------------
 
-    const handleSend = async (manualText = null) => {
+    async function handleSend(manualText = null) {
         const textToSend = (typeof manualText === 'string' ? manualText : inputText);
         if (!textToSend.trim()) return;
         // NOTE: We do NOT return if isLoading is true here, because stopRecording calls this immediately after setting isLoading=true
