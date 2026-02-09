@@ -243,6 +243,18 @@ const HomeScreen = ({ route }) => {
             clearTimeout(timeoutId);
 
             const data = await response.json();
+
+            // Check if response was successful
+            if (!response.ok) {
+                console.error('Transcription API error:', data);
+                if (Platform.OS === 'web') {
+                    alert(`Transcription failed: ${data.detail || 'Unknown error'}. Please check if GROQ_API_KEY is set in Vercel.`);
+                }
+                setIsLoading(false);
+                setRecording(undefined);
+                return;
+            }
+
             if (data.success && data.transcription && data.transcription.trim().length > 0) {
                 // Determine if we should await this or let it run
                 // Awaiting ensures loading state persists correctly if handleSend manages it
@@ -258,9 +270,12 @@ const HomeScreen = ({ route }) => {
             console.error('Stop recording error:', error);
             if (Platform.OS === 'web') {
                 // Don't alert "Aborted" if it's just a timeout/cleanup, but do alert real errors
-                if (error.name !== 'AbortError') alert(`Error: ${error.message}`);
+                if (error.name !== 'AbortError') {
+                    alert(`Voice command error: ${error.message}. Check console for details.`);
+                }
             }
             setIsLoading(false);
+            setRecording(undefined);
         }
     };
     // -----------------------------------
