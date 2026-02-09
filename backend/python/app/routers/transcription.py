@@ -27,7 +27,7 @@ async def transcribe_audio(
         with open(temp_filename, "rb") as file:
             transcription = ai_service.client.audio.transcriptions.create(
                 file=(temp_filename, file.read()),
-                model="whisper-large-v3",
+                model="whisper-large-v3-turbo",
                 response_format="json",
                 language="en",
                 temperature=0.0

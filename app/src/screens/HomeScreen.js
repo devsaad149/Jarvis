@@ -10,7 +10,7 @@ import { Buffer } from 'buffer';
 
 // Backend URL - use relative path for production (Vercel), localhost for local dev
 const BACKEND_URL = Platform.OS === 'web'
-    ? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000')
+    ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8000' : '')
     : 'http://10.0.2.2:8000';
 
 const HomeScreen = ({ route }) => {
