@@ -1,4 +1,4 @@
-// Voice Recording Fix v2.0 - Simplified Logic
+// Voice Recording Fix v3.0 - Robust useRef Logic
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Linking } from 'react-native';
 import axios from 'axios';
@@ -10,7 +10,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Buffer } from 'buffer';
 
 // Backend URL - use relative path for production (Vercel), localhost for local dev
-// Force rebuild: 2026-02-09 18:18
 const BACKEND_URL = Platform.OS === 'web'
     ? (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8000' : '')
     : 'http://10.0.2.2:8000';
@@ -80,6 +79,7 @@ const HomeScreen = ({ route }) => {
     const [recording, setRecording] = useState();
     const [isRecording, setIsRecording] = useState(false);
     const [isCleaningUp, setIsCleaningUp] = useState(false); // Prevent overlapping recordings
+    const recordingRef = useRef(null); // Ref for persistent recording object
     const silenceTimer = useRef(null);
 
     // Web VAD Refs
@@ -93,12 +93,17 @@ const HomeScreen = ({ route }) => {
 
     const startRecording = async () => {
         try {
-            // SIMPLIFIED: Just clear the state, don't try to stop/unload
-            // The previous recording will be handled by stopRecording
-            if (recording) {
-                console.log('Clearing previous recording reference...');
+            // Robust cleanup: Check both Ref and State
+            // The Ref is the "source of truth" for the native resource
+            if (recordingRef.current) {
+                try {
+                    console.log('Stopping and unloading previous recording (from Ref)...');
+                    await recordingRef.current.stopAndUnloadAsync();
+                } catch (e) {
+                    console.log('Cleanup warning (safe to ignore):', e);
+                }
+                recordingRef.current = null;
                 setRecording(undefined);
-                await new Promise(resolve => setTimeout(resolve, 100));
             }
 
             console.log('Requesting permissions...');
@@ -119,6 +124,8 @@ const HomeScreen = ({ route }) => {
                 100
             );
 
+            // Store in BOTH Ref (for logic) and State (for UI)
+            recordingRef.current = newRecording;
             setRecording(newRecording);
             setIsRecording(true);
 
@@ -137,7 +144,7 @@ const HomeScreen = ({ route }) => {
                 const dataArray = new Uint8Array(bufferLength);
 
                 const checkWebVolume = () => {
-                    if (!isRecording && !audioContextRef.current) return; // Stop if recording ended
+                    if (!recordingRef.current && !audioContextRef.current) return; // Stop if recording ended
 
                     analyser.getByteFrequencyData(dataArray);
                     const average = dataArray.reduce((a, b) => a + b) / bufferLength;
@@ -162,10 +169,12 @@ const HomeScreen = ({ route }) => {
         } catch (error) {
             console.error('Failed to start recording', error);
             if (Platform.OS === 'web') {
-                alert(`Failed to start recording: ${error.message}`);
+                // alert(`Failed to start recording: ${error.message}`);
+                console.log("Start recording suppressed error:", error);
             }
             setIsRecording(false);
             setRecording(undefined);
+            recordingRef.current = null;
         }
     };
 
@@ -185,8 +194,8 @@ const HomeScreen = ({ route }) => {
     };
 
     const stopRecording = async () => {
-        // CRITICAL: Store recording reference FIRST before any cleanup
-        const currentRecording = recording;
+        // CRITICAL: Use the Ref to get the recording object
+        const currentRecording = recordingRef.current;
 
         // Clear silence timer
         if (silenceTimer.current) {
@@ -203,15 +212,21 @@ const HomeScreen = ({ route }) => {
         streamRef.current = null;
 
         if (!currentRecording) {
-            console.log('No recording to stop');
+            console.log('No recording to stop (Ref is null)');
             setIsRecording(false);
             return;
         }
 
         setIsRecording(false);
+        // Important: clear the ref immediately to prevent double-stops
+        recordingRef.current = null;
+
         try {
             await currentRecording.stopAndUnloadAsync();
             const uri = currentRecording.getURI();
+
+            // Clear UI state last
+            setRecording(undefined);
 
             // Upload and Transcribe
             setIsLoading(true);
@@ -248,7 +263,6 @@ const HomeScreen = ({ route }) => {
                     alert(`Transcription failed: ${data.detail || 'Unknown error'}. Please check if GROQ_API_KEY is set in Vercel.`);
                 }
                 setIsLoading(false);
-                setRecording(undefined);
                 return;
             }
 
@@ -262,13 +276,13 @@ const HomeScreen = ({ route }) => {
                 setIsLoading(false);
             }
 
-            setRecording(undefined);
         } catch (error) {
             console.error('Stop recording error:', error);
             if (Platform.OS === 'web') {
                 // Don't alert "Aborted" if it's just a timeout/cleanup, but do alert real errors
                 if (error.name !== 'AbortError') {
-                    alert(`Voice command error: ${error.message}. Check console for details.`);
+                    // alert(`Voice command error: ${error.message}. Check console for details.`);
+                    console.log("Stop recording suppressed error:", error);
                 }
             }
             setIsLoading(false);
@@ -650,3 +664,4 @@ const styles = StyleSheet.create({
 });
 
 export default HomeScreen;
+
